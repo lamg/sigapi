@@ -25,7 +25,7 @@ type DBRecord struct {
 func NewPostgreSDB(addr, user, pass string) (d *SDB, e error) {
 	var db *sql.DB
 	db, e = sql.Open("postgres",
-		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
+		fmt.Sprintf("postgres://%s:%s@%s/sigenu", user, pass, addr))
 	if e == nil {
 		d = &SDB{Db: &sqQr{db: db}}
 	}
@@ -90,7 +90,7 @@ func (d *SDB) query(offset, size string) (s []DBRecord, e error) {
 		offset)
 	var r Scanner
 	r, e = d.Db.Query(query)
-	b, s := e == nil, make([]DBRecord, 0)
+	b, s := e == nil && r.Next(), make([]DBRecord, 0)
 	for b {
 		st := DBRecord{}
 		var name, middle_name, last_name string
@@ -100,7 +100,7 @@ func (d *SDB) query(offset, size string) (s []DBRecord, e error) {
 			st.Name = name + " " + middle_name + " " + last_name
 			s = append(s, st)
 		}
-		b = r.Next() && e == nil
+		b = e == nil && r.Next()
 	}
 	return
 }

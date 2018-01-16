@@ -15,6 +15,7 @@ func main() {
 	flag.StringVar(&pass, "p", "", "Contraseña")
 	flag.StringVar(&srv, "s", ":8080",
 		"Dirección para servir la API")
+	flag.Parse()
 	dh, e := NewPostgreSDB(addr, user, pass)
 	if e == nil {
 		s := &http.Server{
