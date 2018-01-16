@@ -15,7 +15,7 @@ func main() {
 	flag.StringVar(&pass, "p", "", "Contraseña")
 	flag.StringVar(&srv, "s", ":8080",
 		"Dirección para servir la API")
-	dh, e := NewSDB(addr, user, pass)
+	dh, e := NewPostgreSDB(addr, user, pass)
 	if e == nil {
 		s := &http.Server{
 			ReadTimeout:  5 * time.Second,
@@ -24,8 +24,10 @@ func main() {
 			Addr:         srv,
 			Handler:      dh,
 		}
-		s.ListenAndServe()
-	} else {
+		e = s.ListenAndServe()
+	}
+	if e != nil {
 		fmt.Fprintf(os.Stderr, e.Error())
+		os.Exit(1)
 	}
 }
