@@ -25,7 +25,7 @@ type DBRecord struct {
 func NewPostgreSDB(addr, user, pass string) (d *SDB, e error) {
 	var db *sql.DB
 	db, e = sql.Open("postgres",
-		fmt.Sprintf("postgres://%s:%s@%s/sigenu", user, pass, addr))
+		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
 	if e == nil {
 		d = &SDB{Db: &sqQr{db: db}}
 	}
