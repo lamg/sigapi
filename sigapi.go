@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
+	"html/template"
 	"io"
 	h "net/http"
 )
@@ -25,34 +27,82 @@ type DBRecord struct {
 	Status  string `json:"status"`
 }
 
-func NewPostgreSDB(addr, user, pass string) (d *SDB, e error) {
+func NewPostgreSDB(addr, user, pass, tpf string) (d *SDB, e error) {
 	var db *sql.DB
 	db, e = sql.Open("postgres",
 		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
+	var tp *template.Template
 	if e == nil {
-		d = &SDB{Db: db}
+		tp, e = template.New("doc").ParseFiles(tpf)
+	}
+	if e == nil {
+		d = &SDB{Db: db, tp: tp}
 	}
 	return
 }
 
 type SDB struct {
-	Db *sql.DB
+	Db       *sql.DB
+	rt       *mux.Router
+	tp       *template.Template
+	pagPath  string
+	idPath   string
+	namePath string
 }
 
-func (d *SDB) ServeHTTP(w h.ResponseWriter, r *h.Request) {
-	var e error
-	var s []DBRecord
-	if r.Method == h.MethodGet {
-		v := r.URL.Query()
-		offset, size := v.Get("offset"), v.Get("size")
-		s, e = d.query(offset, size)
-	} else {
-		e = NotSuppMeth(r.Method)
+const (
+	Offset = "offset"
+	Size   = "size"
+	Id     = "id"
+	Name   = "nombre"
+)
+
+func (d *SDB) GetHandler() (hn h.Handler) {
+	if d.rt == nil {
+		d.rt = mux.NewRouter()
+		d.rt.HandleFunc("/", d.docHn)
+		d.pagPath = fmt.Sprintf("/paginador/{%s:[0-9]+}/{%s:[0-9]+}",
+			Offset, Size)
+		d.rt.HandleFunc(d.pagPath, d.pagHn).Methods(h.MethodGet)
+		d.idPath = fmt.Sprintf("/sigenu-id/{%s:[a-z0-9:-]+}", Id)
+		d.rt.HandleFunc(d.idPath, d.idHn).Methods(h.MethodGet)
+		d.namePath = fmt.Sprintf("/sigenu-nombre/{%s}", Name)
+		d.rt.HandleFunc(d.namePath, d.nameHn).Methods(h.MethodGet)
 	}
+	hn = d.rt
+	return
+}
+
+func (d *SDB) docHn(w h.ResponseWriter, r *h.Request) {
+	e := d.tp.ExecuteTemplate(w, "doc", struct {
+		PagPath  string
+		IdPath   string
+		NamePath string
+	}{
+		PagPath:  d.pagPath,
+		IdPath:   d.idPath,
+		NamePath: d.namePath,
+	})
+	writeErr(w, e)
+}
+
+func (d *SDB) pagHn(w h.ResponseWriter, r *h.Request) {
+	rg := mux.Vars(r)
+	offset := rg[Offset]
+	size := rg[Size]
+	s, e := d.queryRange(offset, size)
 	if e == nil {
 		e = Encode(w, s)
 	}
 	writeErr(w, e)
+}
+
+func (d *SDB) nameHn(w h.ResponseWriter, r *h.Request) {
+
+}
+
+func (d *SDB) idHn(w h.ResponseWriter, r *h.Request) {
+
 }
 
 func writeErr(w h.ResponseWriter, e error) {
@@ -65,7 +115,7 @@ func writeErr(w h.ResponseWriter, e error) {
 	}
 }
 
-func (d *SDB) query(offset, size string) (s []DBRecord, e error) {
+func (d *SDB) queryRange(offset, size string) (s []DBRecord, e error) {
 	// facultad, graduado
 	query := fmt.Sprintf(
 		"SELECT id_student,identification,name,"+
