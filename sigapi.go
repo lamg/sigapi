@@ -51,10 +51,11 @@ type SDB struct {
 }
 
 const (
-	Offset = "offset"
-	Size   = "size"
-	Id     = "id"
-	Name   = "nombre"
+	Offset   = "offset"
+	Size     = "size"
+	Id       = "id"
+	Name     = "nombre"
+	NamePgLn = 100
 )
 
 func (d *SDB) GetHandler() (hn h.Handler) {
@@ -98,21 +99,66 @@ func (d *SDB) pagHn(w h.ResponseWriter, r *h.Request) {
 }
 
 func (d *SDB) nameHn(w h.ResponseWriter, r *h.Request) {
-
+	rg := mux.Vars(r)
+	name := rg[Name]
+	s, e := d.queryName(name)
+	if e == nil {
+		e = Encode(w, s)
+	}
+	writeErr(w, e)
 }
 
 func (d *SDB) idHn(w h.ResponseWriter, r *h.Request) {
-
+	rg := mux.Vars(r)
+	sigId := rg[Id]
+	n, e := d.queryId(sigId)
+	if e == nil {
+		e = Encode(w, n)
+	}
+	writeErr(w, e)
 }
 
-func writeErr(w h.ResponseWriter, e error) {
-	if e != nil {
-		// The order of the following commands matters since
-		// httptest.ResponseRecorder ignores parameter sent
-		// to WriteHeader if Write was called first
-		w.WriteHeader(h.StatusBadRequest)
-		w.Write([]byte(e.Error()))
+func (d *SDB) queryName(name string) (s []DBRecord, e error) {
+	query := "SELECT id_student,identification,name," +
+		"middle_name,last_name,address,phone,student_status_fk," +
+		"faculty_fk,career_fk FROM student WHERE " +
+		"name LIKE '%" + name + "%' " +
+		"OR middle_name LIKE '%" + name + "%' " +
+		"OR last_name LIKE '%" + name + "%'"
+	var r *sql.Rows
+	r, e = d.Db.Query(query)
+	s = make([]DBRecord, NamePgLn)
+	end, i := e != nil, 0
+	for !end {
+		var n DBRecord
+		next := r.Next()
+		if next {
+			n, e = d.scanStudent(r)
+		}
+		if e == nil && next {
+			s[i], i = n, i+1
+		}
+		end = i == NamePgLn || e != nil || !next
 	}
+	s = s[:i]
+	return
+}
+
+func (d *SDB) queryId(id string) (s *DBRecord, e error) {
+	query := fmt.Sprintf("SELECT id_student,identification,name,"+
+		"middle_name,last_name,address,phone,student_status_fk,"+
+		"faculty_fk,career_fk FROM student WHERE id_student = '%s'",
+		id)
+	var r *sql.Rows
+	r, e = d.Db.Query(query)
+	var n DBRecord
+	if e == nil && r.Next() {
+		n, e = d.scanStudent(r)
+	}
+	if e == nil {
+		s = &n
+	}
+	return
 }
 
 func (d *SDB) queryRange(offset, size string) (s []DBRecord, e error) {
@@ -127,25 +173,33 @@ func (d *SDB) queryRange(offset, size string) (s []DBRecord, e error) {
 	r, e = d.Db.Query(query)
 	s = make([]DBRecord, 0)
 	for e == nil && r.Next() {
-		st := DBRecord{}
-		var name, middle_name, last_name, car_fk string
-		var stat_fk, fac_fk sql.NullString
-		e = r.Scan(&st.Id, &st.IN, &name, &middle_name, &last_name,
-			&st.Addr, &st.Tel, &stat_fk, &fac_fk, &car_fk)
-		var ax *auxInf
+		var n DBRecord
+		n, e = d.scanStudent(r)
 		if e == nil {
-			ax, _ = d.queryAux(stat_fk.String, fac_fk.String, car_fk)
-		}
-		if e == nil {
-			st.Career, st.Faculty, st.Status = ax.career, ax.faculty,
-				ax.status
-			st.Name = name + " " + middle_name + " " + last_name
-			s = append(s, st)
+			s = append(s, n)
 		}
 	}
 	if r != nil && e == nil {
 		e = r.Err()
 		r.Close()
+	}
+	return
+}
+
+func (d *SDB) scanStudent(r *sql.Rows) (s DBRecord, e error) {
+	s = DBRecord{}
+	var name, middle_name, last_name, car_fk string
+	var stat_fk, fac_fk sql.NullString
+	e = r.Scan(&s.Id, &s.IN, &name, &middle_name, &last_name,
+		&s.Addr, &s.Tel, &stat_fk, &fac_fk, &car_fk)
+	var ax *auxInf
+	if e == nil {
+		ax, e = d.queryAux(stat_fk.String, fac_fk.String, car_fk)
+	}
+	if e == nil {
+		s.Career, s.Faculty, s.Status = ax.career, ax.faculty,
+			ax.status
+		s.Name = name + " " + middle_name + " " + last_name
 	}
 	return
 }
@@ -220,8 +274,12 @@ func Encode(w io.Writer, v interface{}) (e error) {
 	return
 }
 
-// NotSuppMeth is the not supported method message
-func NotSuppMeth(m string) (e error) {
-	e = fmt.Errorf("Not supported method %s", m)
-	return
+func writeErr(w h.ResponseWriter, e error) {
+	if e != nil {
+		// The order of the following commands matters since
+		// httptest.ResponseRecorder ignores parameter sent
+		// to WriteHeader if Write was called first
+		w.WriteHeader(h.StatusBadRequest)
+		w.Write([]byte(e.Error()))
+	}
 }
