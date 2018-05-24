@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	ld "github.com/lamg/ldaputil"
 	_ "github.com/lib/pq"
 	"html/template"
 	"io"
@@ -43,6 +44,7 @@ func NewPostgreSDB(addr, user, pass, tpf string) (d *SDB, e error) {
 
 type SDB struct {
 	Db       *sql.DB
+	Ld       *ld.Ldap
 	rt       *mux.Router
 	tp       *template.Template
 	pagPath  string
@@ -158,6 +160,11 @@ func (d *SDB) queryId(id string) (s *DBRecord, e error) {
 	if e == nil {
 		s = &n
 	}
+	return
+}
+
+func (d *SDB) queryGrades(idStudent string) (gs []string, e error) {
+
 	return
 }
 
