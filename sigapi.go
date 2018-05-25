@@ -28,7 +28,8 @@ type DBRecord struct {
 	Status  string `json:"status"`
 }
 
-func NewPostgreSDB(addr, user, pass, tpf string) (d *SDB, e error) {
+func NewPostgreSDB(addr, user, pass, tpf string,
+	ld *ld.Ldap) (d *SDB, e error) {
 	var db *sql.DB
 	db, e = sql.Open("postgres",
 		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
@@ -50,6 +51,7 @@ type SDB struct {
 	pagPath  string
 	idPath   string
 	namePath string
+	evalPath string
 }
 
 const (
@@ -57,6 +59,7 @@ const (
 	Size     = "size"
 	Id       = "id"
 	Name     = "nombre"
+	IN       = "identity"
 	NamePgLn = 100
 )
 
@@ -71,6 +74,10 @@ func (d *SDB) GetHandler() (hn h.Handler) {
 		d.rt.HandleFunc(d.idPath, d.idHn).Methods(h.MethodGet)
 		d.namePath = fmt.Sprintf("/sigenu-nombre/{%s}", Name)
 		d.rt.HandleFunc(d.namePath, d.nameHn).Methods(h.MethodGet)
+		d.authPath = "/auth"
+		d.rt.HandleFunc(d.evalPath, d.authHn)
+		d.evalPath = fmt.Sprintf("/eval/{%s:[0-9]+}", IN)
+		d.rt.HandleFunc(d.evalPath, d.evaluationsHn)
 	}
 	hn = d.rt
 	return
@@ -163,21 +170,106 @@ func (d *SDB) queryId(id string) (s *DBRecord, e error) {
 	return
 }
 
-func (d *SDB) queryGrades(idStudent string) (gs []string, e error) {
+type StudentEvl struct {
+	SubjectName string `json:"subjectName"`
+	EvalValue   string `json:"evalValue"`
+}
 
+func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
+	query := "SELECT id_student FROM student WHERE identification = ?"
+	var r *sql.Rows
+	r, e = d.Db.Query(query, idStudent)
+	var studDBId string
+	if e == nil && r.Next() {
+		e = r.Scan(&studDBId)
+	}
+	if e == nil {
+		query = "SELECT evaluation_value_fk,matriculated_subject_fk " +
+			" FROM evaluation WHERE student_fk = ?"
+		r, e = d.Db.Query(query, studDBId)
+	}
+	evalValId, matSubjId := make([]string, 0)
+	for i := 0; e == nil && r.Next(); i++ {
+		var ev, ms string
+		e = r.Scan(&ev, &ms)
+		if e == nil {
+			evalValId, matSubjId = append(evalValId, ev),
+				append(matSubjId, ms)
+		}
+	}
+	evalVal := make([]string, 0)
+	for i := 0; e == nil && i != len(evalValId); i++ {
+		query = "SELECT value FROM evaluation_value WHERE " +
+			"id_evaluation_value = ?"
+		r, e = d.Db.Query(query, evalValId[i])
+		var ev string
+		if e == nil && r.Next() {
+			e = r.Scan(&ev)
+		}
+		if e == nil {
+			evalVal = append(evalVal, ev)
+		}
+	}
+
+	subjId := make([]string, 0)
+	for i := 0; e == nil && i != len(matSubjId); i++ {
+		query = "SELECT subject_fk FROM matriculated_subject WHERE " +
+			"matriculated_subject_id = ?"
+		r, e = d.Db.Query(query, matSubjId)
+		var si string
+		if e == nil && r.Next() {
+			e = r.Scan(&si)
+		}
+		if e == nil {
+			subjId = append(subjId, si)
+		}
+	}
+
+	subjNameId := make([]string, 0)
+	for i := 0; e == nil && i != len(subjId); i++ {
+		query = "SELECT subject_name_fk FROM subject WHERE " +
+			"subject_id = ?"
+		r, e = d.Db.Query(query, subjId[i])
+		var sni string
+		if e == nil && r.Next() {
+			e = r.Scan(&sni)
+		}
+		if e == nil {
+			subjNameId = append(subjNameId, sni)
+		}
+	}
+
+	subjName := make([]string, 0)
+	for i := 0; e == nil && i != len(subjNameId); i++ {
+		query = "SELECT name FROM subject_name WHERE " +
+			"subject_name_id = ?"
+		r, e = d.Db.Query(query, subjNameId[i])
+		var sn string
+		if e == nil && r.Next() {
+			e = r.Scan(&sn)
+		}
+		if e == nil {
+			subjName = append(subjName, sn)
+		}
+	}
+
+	es = make([]StudentEvl, len(subjName))
+	for i := 0; e == nil && len(subjName); i++ {
+		es[i] = StudentEvl{
+			SubjectName: subjName[i],
+			StudentEvl:  evalVal[i],
+		}
+	}
 	return
 }
 
 func (d *SDB) queryRange(offset, size string) (s []DBRecord, e error) {
 	// facultad, graduado
-	query := fmt.Sprintf(
-		"SELECT id_student,identification,name,"+
-			"middle_name,last_name,address,phone,student_status_fk,"+
-			"faculty_fk,career_fk FROM student LIMIT %s OFFSET %s",
-		size,
-		offset)
+	query := "SELECT id_student,identification,name," +
+		"middle_name,last_name,address,phone,student_status_fk," +
+		"faculty_fk,career_fk FROM student LIMIT ? OFFSET ?"
 	var r *sql.Rows
-	r, e = d.Db.Query(query)
+	r, e = d.Db.Query(query, size, offset)
 	s = make([]DBRecord, 0)
 	for e == nil && r.Next() {
 		var n DBRecord

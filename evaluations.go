@@ -7,23 +7,12 @@ import (
 	h "net/http"
 )
 
-type Credentials struct {
-	User string `json:"user"`
-	Pass string `json:"pass"`
-}
-
 const (
 	EmployeeID = "employeeID"
 )
 
-func (d *SDB) gradesHn(w h.ResponseWriter, r *h.Request) {
-	bs, e := ioutil.ReadAll(r.Body)
-	var c *Credentials
-	if e == nil {
-		r.Body.Close()
-		c = new(Credentials)
-		e = json.Unmarshal(bs, c)
-	}
+func (d *SDB) evaluationsHn(w h.ResponseWriter, r *h.Request) {
+	c, e := decrypt(r)
 	var mp map[string][]string
 	if e == nil {
 		mp, e = d.Ld.FullRecord(c.User, c.Pass, c.User)
@@ -40,7 +29,7 @@ func (d *SDB) gradesHn(w h.ResponseWriter, r *h.Request) {
 	}
 	var gs string
 	if e == nil {
-		gs, e = d.queryGrades(ci)
+		gs, e = d.queryEvl(ci)
 	}
 	var gsbs []byte
 	if e == nil {
