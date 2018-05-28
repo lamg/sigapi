@@ -1,10 +1,10 @@
-package main
+package sigapi
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	h "net/http"
+	"strings"
 )
 
 const (
@@ -12,7 +12,7 @@ const (
 )
 
 func (d *SDB) evaluationsHn(w h.ResponseWriter, r *h.Request) {
-	c, e := decrypt(r)
+	c, e := d.cr.decrypt(r)
 	var mp map[string][]string
 	if e == nil {
 		mp, e = d.Ld.FullRecord(c.User, c.Pass, c.User)
@@ -21,13 +21,13 @@ func (d *SDB) evaluationsHn(w h.ResponseWriter, r *h.Request) {
 	if e == nil {
 		cia, ok := mp[EmployeeID]
 		if ok && len(cia) != 0 {
-			ci = cia[0]
+			ci = strings.TrimSpace(cia[0])
 		}
 		if ci == "" {
 			e = NoEmployeeIDField(c.User)
 		}
 	}
-	var gs string
+	var gs []StudentEvl
 	if e == nil {
 		gs, e = d.queryEvl(ci)
 	}

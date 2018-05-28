@@ -1,14 +1,12 @@
-package main
+package sigapi
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
 	ld "github.com/lamg/ldaputil"
 	_ "github.com/lib/pq"
 	"html/template"
-	"io"
 	h "net/http"
 )
 
@@ -38,7 +36,7 @@ func NewPostgreSDB(addr, user, pass, tpf string,
 		tp, e = template.New("doc").ParseFiles(tpf)
 	}
 	if e == nil {
-		d = &SDB{Db: db, tp: tp}
+		d = &SDB{Db: db, tp: tp, cr: NewJWTCrypt(), Ld: ld}
 	}
 	return
 }
@@ -46,12 +44,14 @@ func NewPostgreSDB(addr, user, pass, tpf string,
 type SDB struct {
 	Db       *sql.DB
 	Ld       *ld.Ldap
+	cr       *JWTCrypt
 	rt       *mux.Router
 	tp       *template.Template
 	pagPath  string
 	idPath   string
 	namePath string
 	evalPath string
+	authPath string
 }
 
 const (
@@ -75,8 +75,8 @@ func (d *SDB) GetHandler() (hn h.Handler) {
 		d.namePath = fmt.Sprintf("/sigenu-nombre/{%s}", Name)
 		d.rt.HandleFunc(d.namePath, d.nameHn).Methods(h.MethodGet)
 		d.authPath = "/auth"
-		d.rt.HandleFunc(d.evalPath, d.authHn)
-		d.evalPath = fmt.Sprintf("/eval/{%s:[0-9]+}", IN)
+		d.rt.HandleFunc(d.authPath, d.authHn).Methods(h.MethodPost)
+		d.evalPath = "/eval"
 		d.rt.HandleFunc(d.evalPath, d.evaluationsHn)
 	}
 	hn = d.rt
@@ -176,32 +176,57 @@ type StudentEvl struct {
 }
 
 func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
-	query := "SELECT id_student FROM student WHERE identification = ?"
+	query := fmt.Sprintf("SELECT id_student FROM student WHERE "+
+		" identification = '%s'", idStudent)
+	println("query: " + query)
+	print("idStudent: ")
+	println(idStudent)
 	var r *sql.Rows
-	r, e = d.Db.Query(query, idStudent)
+	r, e = d.Db.Query(query)
 	var studDBId string
-	if e == nil && r.Next() {
+	print("error: ")
+	println(e != nil)
+	ok := r.Next()
+	print("ok: ")
+	println(ok)
+	rerr := r.Err()
+	if rerr != nil {
+		print("rerr: ")
+		println(rerr.Error())
+	}
+	if e == nil && ok {
 		e = r.Scan(&studDBId)
 	}
+	print("studDBId: ")
+	println(studDBId)
 	if e == nil {
-		query = "SELECT evaluation_value_fk,matriculated_subject_fk " +
-			" FROM evaluation WHERE student_fk = ?"
-		r, e = d.Db.Query(query, studDBId)
+		query = fmt.Sprintf(
+			"SELECT evaluation_value_fk,matriculated_subject_fk "+
+				" FROM evaluation WHERE student_fk = '%s'", studDBId)
+		r, e = d.Db.Query(query)
 	}
-	evalValId, matSubjId := make([]string, 0)
+	evalValId, matSubjId := make([]string, 0), make([]string, 0)
 	for i := 0; e == nil && r.Next(); i++ {
-		var ev, ms string
+		var ev, ms sql.NullString
 		e = r.Scan(&ev, &ms)
-		if e == nil {
-			evalValId, matSubjId = append(evalValId, ev),
-				append(matSubjId, ms)
+		if e == nil && ev.Valid && ms.Valid {
+			evalValId, matSubjId = append(evalValId, ev.String),
+				append(matSubjId, ms.String)
 		}
 	}
+	print("matSubjId: ")
+	println(len(matSubjId))
+	print("evalValId: ")
+	println(len(evalValId))
+	print("error: ")
+	println(e != nil)
 	evalVal := make([]string, 0)
 	for i := 0; e == nil && i != len(evalValId); i++ {
-		query = "SELECT value FROM evaluation_value WHERE " +
-			"id_evaluation_value = ?"
-		r, e = d.Db.Query(query, evalValId[i])
+		query = fmt.Sprintf("SELECT value FROM evaluation_value WHERE "+
+			"id_evaluation_value = '%s'", evalValId[i])
+		print("query evalValId: ")
+		println(query)
+		r, e = d.Db.Query(query)
 		var ev string
 		if e == nil && r.Next() {
 			e = r.Scan(&ev)
@@ -210,12 +235,14 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 			evalVal = append(evalVal, ev)
 		}
 	}
-
+	print("evalVal: ")
+	println(len(evalVal))
 	subjId := make([]string, 0)
 	for i := 0; e == nil && i != len(matSubjId); i++ {
-		query = "SELECT subject_fk FROM matriculated_subject WHERE " +
-			"matriculated_subject_id = ?"
-		r, e = d.Db.Query(query, matSubjId)
+		query = fmt.Sprintf(
+			"SELECT subject_fk FROM matriculated_subject WHERE "+
+				"matriculated_subject_id = '%s'", matSubjId[i])
+		r, e = d.Db.Query(query)
 		var si string
 		if e == nil && r.Next() {
 			e = r.Scan(&si)
@@ -224,12 +251,14 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 			subjId = append(subjId, si)
 		}
 	}
-
+	print("subjId: ")
+	println(len(subjId))
 	subjNameId := make([]string, 0)
 	for i := 0; e == nil && i != len(subjId); i++ {
-		query = "SELECT subject_name_fk FROM subject WHERE " +
-			"subject_id = ?"
-		r, e = d.Db.Query(query, subjId[i])
+		query = fmt.Sprintf(
+			"SELECT subject_name_fk FROM subject WHERE "+
+				"subject_id = '%s'", subjId[i])
+		r, e = d.Db.Query(query)
 		var sni string
 		if e == nil && r.Next() {
 			e = r.Scan(&sni)
@@ -238,12 +267,13 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 			subjNameId = append(subjNameId, sni)
 		}
 	}
-
+	print("subjNameId: ")
+	println(len(subjNameId))
 	subjName := make([]string, 0)
 	for i := 0; e == nil && i != len(subjNameId); i++ {
-		query = "SELECT name FROM subject_name WHERE " +
-			"subject_name_id = ?"
-		r, e = d.Db.Query(query, subjNameId[i])
+		query = fmt.Sprintf("SELECT name FROM subject_name WHERE "+
+			"subject_name_id = '%s'", subjNameId[i])
+		r, e = d.Db.Query(query)
 		var sn string
 		if e == nil && r.Next() {
 			e = r.Scan(&sn)
@@ -252,12 +282,13 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 			subjName = append(subjName, sn)
 		}
 	}
-
+	print("subjName: ")
+	println(len(subjName))
 	es = make([]StudentEvl, len(subjName))
-	for i := 0; e == nil && len(subjName); i++ {
+	for i := 0; e == nil && i != len(subjName); i++ {
 		es[i] = StudentEvl{
 			SubjectName: subjName[i],
-			StudentEvl:  evalVal[i],
+			EvalValue:   evalVal[i],
 		}
 	}
 	return
@@ -265,11 +296,12 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 
 func (d *SDB) queryRange(offset, size string) (s []DBRecord, e error) {
 	// facultad, graduado
-	query := "SELECT id_student,identification,name," +
-		"middle_name,last_name,address,phone,student_status_fk," +
-		"faculty_fk,career_fk FROM student LIMIT ? OFFSET ?"
+	query := fmt.Sprintf("SELECT id_student,identification,name,"+
+		"middle_name,last_name,address,phone,student_status_fk,"+
+		"faculty_fk,career_fk FROM student LIMIT %s OFFSET %s",
+		size, offset)
 	var r *sql.Rows
-	r, e = d.Db.Query(query, size, offset)
+	r, e = d.Db.Query(query)
 	s = make([]DBRecord, 0)
 	for e == nil && r.Next() {
 		var n DBRecord
@@ -363,22 +395,4 @@ func (d *SDB) queryAux(stat_fk, fac_fk,
 		s.Close()
 	}
 	return
-}
-
-// Encode encodes an object in JSON notation into w
-func Encode(w io.Writer, v interface{}) (e error) {
-	cd := json.NewEncoder(w)
-	cd.SetIndent("	", "")
-	e = cd.Encode(v)
-	return
-}
-
-func writeErr(w h.ResponseWriter, e error) {
-	if e != nil {
-		// The order of the following commands matters since
-		// httptest.ResponseRecorder ignores parameter sent
-		// to WriteHeader if Write was called first
-		w.WriteHeader(h.StatusBadRequest)
-		w.Write([]byte(e.Error()))
-	}
 }

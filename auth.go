@@ -1,7 +1,6 @@
-package main
+package sigapi
 
 import (
-	"io/ioutil"
 	h "net/http"
 )
 
@@ -12,7 +11,7 @@ func (d *SDB) authHn(w h.ResponseWriter, r *h.Request) {
 	}
 	var s string
 	if e == nil {
-		s, e = encrypt(c)
+		s, e = d.cr.encrypt(c)
 	}
 	if e == nil {
 		w.Write([]byte(s))

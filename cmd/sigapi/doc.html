@@ -1,0 +1,23 @@
+{{define "doc"}}
+<!DOCTYPE html>
+<html lang="es">
+	<head>
+		<meta charset="utf-8">
+		<title>API REST para SIGENU</title>
+	</head>
+	<body>
+		<h1>
+			Descripción de la API
+		</h1>
+		
+		<h2>Paginador</h2>
+		<p> La ruta <code>paginador</code> recibe dos números que son el índice del primer elemento que se va a mostrar en la página, y la cantidad de elementos que tendrá la página. Por ejemplo <code>/pagina/0/10</code> comenzará desde el elemento 0 mostrando una página de 10 elementos. La especificación formal de la ruta es {{.PagPath}}</p>
+
+		<h2>Obtener registro según el identificador</h2>
+		<p> La ruta <code>sigenu-id</code> devuelve el registro en la base de datos SIGENU asociado al identificador suministrado en la URL. Por ejemplo <code>/sigenu-id/-6baf556d:13225553c27:-7fce</code> devuelve el registro en SIGENU con ese identificador. La especificación formal de la ruta es {{.IdPath}}</p>
+
+		<h2>Filtrar por nombre</h2>
+		<p> La ruta <code>nombre</code> filtra todos los registros en SIGENU cuyo nombre coincide con el patrón suministrado. Por ejemplo, <code>/nombre/juan</code> devuelve todos los registros cuyo campo nombre contiene <code>juan</code>. La especificación formal de la ruta es {{.NamePath}}</p>
+	</body>
+</html>
+{{end}}

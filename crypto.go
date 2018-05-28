@@ -1,4 +1,4 @@
-package main
+package sigapi
 
 import (
 	"crypto/rand"
@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	h "net/http"
+	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
 )
@@ -39,15 +40,6 @@ func credentials(r *h.Request) (c *Credentials, e error) {
 		c = new(Credentials)
 		e = json.Unmarshal(bs, c)
 	}
-	return
-}
-
-func encrypt(c *Credentials) (s string) {
-
-	return
-}
-
-func decrypt(r *h.Request) (c *Credentials, e error) {
 	return
 }
 
@@ -86,7 +78,7 @@ type JWTCrypt struct {
 
 // JWTUser adds jwt.StandardClaims to an User
 type JWTUser struct {
-	User string `json:"user"`
+	Cred *Credentials `json:"cred"`
 	jwt.StandardClaims
 }
 
@@ -101,15 +93,19 @@ func NewJWTCrypt() (j *JWTCrypt) {
 	return
 }
 
-func (j *JWTCrypt) encrypt(usr string) (s string, e error) {
-	uc := &JWTUser{User: usr}
+func (j *JWTCrypt) encrypt(c *Credentials) (s string, e error) {
+	uc := &JWTUser{Cred: c}
+	uc.ExpiresAt = time.Now().Add(time.Hour).Unix()
 	t := jwt.NewWithClaims(jwt.GetSigningMethod("RS256"), uc)
 	s, e = t.SignedString(j.pKey)
 	return
 }
 
-// checkUser checks if the signature is ok
-func (j *JWTCrypt) checkUser(s string) (u string, e error) {
+func (j *JWTCrypt) decrypt(r *h.Request) (c *Credentials, e error) {
+	s := r.Header.Get(AuthHd)
+	if s == "" {
+		e = HeaderErr()
+	}
 	t, e := jwt.ParseWithClaims(s, &JWTUser{},
 		func(x *jwt.Token) (a interface{}, d error) {
 			a, d = &j.pKey.PublicKey, nil
@@ -119,7 +115,7 @@ func (j *JWTCrypt) checkUser(s string) (u string, e error) {
 	if e == nil {
 		var ok bool
 		clm, ok = t.Claims.(*JWTUser)
-		if !ok || clm.User == "" {
+		if !ok || clm.Cred == nil {
 			panic(NotJWTUser)
 			// { the private key was used to sign something
 			//   different from a *JWTUser, which is not
@@ -128,18 +124,7 @@ func (j *JWTCrypt) checkUser(s string) (u string, e error) {
 		}
 	}
 	if e == nil {
-		u = clm.User
-	}
-	return
-}
-
-func (j *JWTCrypt) user(a h.Header) (u string, e error) {
-	s := a.Get(AuthHd)
-	if s == "" {
-		e = HeaderErr()
-	}
-	if e == nil {
-		u, e = j.checkUser(s)
+		c = clm.Cred
 	}
 	return
 }
