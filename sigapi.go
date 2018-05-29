@@ -174,6 +174,8 @@ func (d *SDB) queryId(id string) (s *DBRecord, e error) {
 type StudentEvl struct {
 	SubjectName string `json:"subjectName"`
 	EvalValue   string `json:"evalValue"`
+	Period      string `json:"period"`
+	Year        string `json:"year"`
 }
 
 func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
@@ -257,19 +259,23 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 	}
 	// print("subjId: ")
 	// println(len(subjId))
-	subjNameId := make([]string, 0)
+	subjNameId, subjPeriod, subjYear := make([]string, 0),
+		make([]string, 0), make([]string, 0)
 	for i := 0; e == nil && i != len(subjId); i++ {
 		r.Close()
 		query = fmt.Sprintf(
-			"SELECT subject_name_fk FROM subject WHERE "+
+			"SELECT subject_name_fk, period, year FROM subject WHERE "+
 				"subject_id = '%s'", subjId[i])
 		r, e = d.Db.Query(query)
-		var sni string
+		var sni, period, year string
 		if e == nil && r.Next() {
-			e = r.Scan(&sni)
+			e = r.Scan(&sni, &period, &year)
 		}
 		if e == nil {
-			subjNameId = append(subjNameId, sni)
+			subjNameId, subjPeriod, subjYear =
+				append(subjNameId, sni),
+				append(subjPeriod, period),
+				append(subjYear, year)
 		}
 	}
 	// print("subjNameId: ")
@@ -294,6 +300,8 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 	for i := 0; e == nil && i != len(subjName); i++ {
 		es[i] = StudentEvl{
 			SubjectName: subjName[i],
+			Period:      subjPeriod[i],
+			Year:        subjYear[i],
 			EvalValue:   evalVal[i],
 		}
 	}
