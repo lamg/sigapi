@@ -83,6 +83,6 @@ func printBody(r *h.Response, e error) {
 		r.Body.Close()
 	}
 	if e == nil {
-		fmt.Print(string(body))
+		fmt.Println(string(body))
 	}
 }

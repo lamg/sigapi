@@ -1,7 +1,6 @@
 package sigapi
 
 import (
-	"encoding/json"
 	"fmt"
 	h "net/http"
 	"strings"
@@ -31,12 +30,8 @@ func (d *SDB) evaluationsHn(w h.ResponseWriter, r *h.Request) {
 	if e == nil {
 		gs, e = d.queryEvl(ci)
 	}
-	var gsbs []byte
 	if e == nil {
-		gsbs, e = json.Marshal(gs)
-	}
-	if e == nil {
-		w.Write(gsbs)
+		e = Encode(w, gs)
 	}
 	writeErr(w, e)
 }
