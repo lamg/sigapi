@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	ld "github.com/lamg/ldaputil"
 	_ "github.com/lib/pq"
+	"github.com/rs/cors"
 	"html/template"
 	h "net/http"
 )
@@ -79,7 +80,7 @@ func (d *SDB) GetHandler() (hn h.Handler) {
 		d.evalPath = "/eval"
 		d.rt.HandleFunc(d.evalPath, d.evaluationsHn)
 	}
-	hn = d.rt
+	hn = cors.AllowAll().Handler(d.rt)
 	return
 }
 
