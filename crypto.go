@@ -78,7 +78,7 @@ type JWTCrypt struct {
 
 // JWTUser adds jwt.StandardClaims to an User
 type JWTUser struct {
-	Cred *Credentials `json:"cred"`
+	User string `json:"user"`
 	jwt.StandardClaims
 }
 
@@ -94,14 +94,14 @@ func NewJWTCrypt() (j *JWTCrypt) {
 }
 
 func (j *JWTCrypt) encrypt(c *Credentials) (s string, e error) {
-	uc := &JWTUser{Cred: c}
+	uc := &JWTUser{User: c.User}
 	uc.ExpiresAt = time.Now().Add(time.Hour).Unix()
 	t := jwt.NewWithClaims(jwt.GetSigningMethod("RS256"), uc)
 	s, e = t.SignedString(j.pKey)
 	return
 }
 
-func (j *JWTCrypt) decrypt(r *h.Request) (c *Credentials, e error) {
+func (j *JWTCrypt) decrypt(r *h.Request) (usr string, e error) {
 	s := r.Header.Get(AuthHd)
 	if s == "" {
 		e = HeaderErr()
@@ -115,7 +115,7 @@ func (j *JWTCrypt) decrypt(r *h.Request) (c *Credentials, e error) {
 	if e == nil {
 		var ok bool
 		clm, ok = t.Claims.(*JWTUser)
-		if !ok || clm.Cred == nil {
+		if !ok || clm.User == "" {
 			panic(NotJWTUser)
 			// { the private key was used to sign something
 			//   different from a *JWTUser, which is not
@@ -124,7 +124,7 @@ func (j *JWTCrypt) decrypt(r *h.Request) (c *Credentials, e error) {
 		}
 	}
 	if e == nil {
-		c = clm.Cred
+		usr = clm.User
 	}
 	return
 }

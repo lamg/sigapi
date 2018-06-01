@@ -12,10 +12,10 @@ const (
 )
 
 func (d *SDB) evaluationsHn(w h.ResponseWriter, r *h.Request) {
-	c, e := d.cr.decrypt(r)
+	usr, e := d.cr.decrypt(r)
 	var mp map[string][]string
 	if e == nil {
-		mp, e = d.Ld.FullRecord(c.User, c.Pass, c.User)
+		mp, e = d.Ld.FullRecordAcc(usr)
 	}
 	var ci string
 	if e == nil {
@@ -24,7 +24,7 @@ func (d *SDB) evaluationsHn(w h.ResponseWriter, r *h.Request) {
 			ci = strings.TrimSpace(cia[0])
 		}
 		if ci == "" {
-			e = NoEmployeeIDField(c.User)
+			e = NoEmployeeIDField(usr)
 		}
 	}
 	var gs []StudentEvl
