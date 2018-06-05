@@ -13,17 +13,9 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/dir
-EnvironmentFile=/dir/credentials
-ExecStart=/usr/local/bin/sigapi -a postgresql.server/database -u usuario -p contraseña -s :8081 -l doc.html -ad ldap.server:636 -sf account_suffix -bdn base_dn -adu $ad_user -adp $ad_password
+ExecStart=/usr/local/bin/sigapi -a postgresql.server/database -u usuario -p contraseña -s :8081 -l doc.html
 Restart=on-abort
 
 [Install]
 WantedBy=multi-user.target
-```
-
-El archivo `/dir/credentials` debe contener
-
-```conf
-ad_user=usuario
-ad_password=contraseña
 ```

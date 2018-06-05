@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/lamg/ldaputil"
 	"github.com/lamg/sigapi"
 	"net/http"
 	"os"
@@ -19,22 +18,15 @@ func main() {
 		"Dirección para servir la API")
 	flag.StringVar(&tmpl, "l", "",
 		"Camino de la plantilla de la documentación")
-	var adAddr, suff, bdn, adUser, adPass string
-	flag.StringVar(&adAddr, "ad", "", "LDAP server address")
-	flag.StringVar(&suff, "sf", "", "LDAP server account suffix")
-	flag.StringVar(&bdn, "bdn", "", "LDAP server base DN")
-	flag.StringVar(&adUser, "adu", "", "Usuario del AD")
-	flag.StringVar(&adPass, "adp", "", "Contraseña del AD")
 	flag.Parse()
-	ld := ldaputil.NewLdapWithAcc(adAddr, suff, bdn, adUser, adPass)
-	dh, e := sigapi.NewPostgreSDB(addr, user, pass, tmpl, ld)
+	dh, e := sigapi.NewPostgreSDB(addr, user, pass, tmpl)
 	if e == nil {
 		s := &http.Server{
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 10 * time.Second,
 			IdleTimeout:  0,
 			Addr:         srv,
-			Handler:      dh.GetHandler(),
+			Handler:      dh.Handler,
 		}
 		e = s.ListenAndServe()
 	}

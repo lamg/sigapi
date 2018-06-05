@@ -1,10 +1,11 @@
 package sigapi
 
 import (
+	"database/sql"
 	"fmt"
+	"github.com/gorilla/mux"
 	h "net/http"
 	"sort"
-	"strings"
 )
 
 const (
@@ -12,25 +13,9 @@ const (
 )
 
 func (d *SDB) evaluationsHn(w h.ResponseWriter, r *h.Request) {
-	usr, e := d.cr.decrypt(r)
-	var mp map[string][]string
-	if e == nil {
-		mp, e = d.Ld.FullRecordAcc(usr)
-	}
-	var ci string
-	if e == nil {
-		cia, ok := mp[EmployeeID]
-		if ok && len(cia) != 0 {
-			ci = strings.TrimSpace(cia[0])
-		}
-		if ci == "" {
-			e = NoEmployeeIDField(usr)
-		}
-	}
-	var gs []StudentEvl
-	if e == nil {
-		gs, e = d.queryEvl(ci)
-	}
+	rg := mux.Vars(r)
+	ci := rg[IN]
+	gs, e := d.queryEvl(ci)
 	if e == nil {
 		ev := sortAndRemDup(gs)
 		e = Encode(w, ev)
@@ -124,5 +109,142 @@ func canUpdate(a []SubjEval, v SubjEval) (ok bool) {
 		a[i] = v
 	}
 	ok = f
+	return
+}
+
+type StudentEvl struct {
+	SubjectName string `json:"subjectName"`
+	EvalValue   string `json:"evalValue"`
+	Period      string `json:"period"`
+	Year        string `json:"year"`
+}
+
+func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
+	query := fmt.Sprintf("SELECT id_student FROM student WHERE "+
+		" identification = '%s'", idStudent)
+	// println("query: " + query)
+	// print("idStudent: ")
+	// println(idStudent)
+	var r *sql.Rows
+	r, e = d.Db.Query(query)
+	var studDBId string
+	// print("error: ")
+	// println(e != nil)
+	ok := r.Next()
+	// print("ok: ")
+	// println(ok)
+	// rerr := r.Err()
+	// if rerr != nil {
+	// 	print("rerr: ")
+	// 	println(rerr.Error())
+	// }
+	if e == nil && ok {
+		e = r.Scan(&studDBId)
+	}
+	// print("studDBId: ")
+	// println(studDBId)
+	if e == nil {
+		r.Close()
+		query = fmt.Sprintf(
+			"SELECT evaluation_value_fk,matriculated_subject_fk "+
+				" FROM evaluation WHERE student_fk = '%s'", studDBId)
+		r, e = d.Db.Query(query)
+	}
+	evalValId, matSubjId := make([]string, 0), make([]string, 0)
+	for i := 0; e == nil && r.Next(); i++ {
+		var ev, ms sql.NullString
+		e = r.Scan(&ev, &ms)
+		if e == nil && ev.Valid && ms.Valid {
+			evalValId, matSubjId = append(evalValId, ev.String),
+				append(matSubjId, ms.String)
+		}
+	}
+	// print("matSubjId: ")
+	// println(len(matSubjId))
+	// print("evalValId: ")
+	// println(len(evalValId))
+	// print("error: ")
+	// println(e != nil)
+	evalVal := make([]string, 0)
+	for i := 0; e == nil && i != len(evalValId); i++ {
+		r.Close()
+		query = fmt.Sprintf("SELECT value FROM evaluation_value WHERE "+
+			"id_evaluation_value = '%s'", evalValId[i])
+		// print("query evalValId: ")
+		// println(query)
+		r, e = d.Db.Query(query)
+		var ev string
+		if e == nil && r.Next() {
+			e = r.Scan(&ev)
+		}
+		if e == nil {
+			evalVal = append(evalVal, ev)
+		}
+	}
+	// print("evalVal: ")
+	// println(len(evalVal))
+	subjId := make([]string, 0)
+	for i := 0; e == nil && i != len(matSubjId); i++ {
+		r.Close()
+		query = fmt.Sprintf(
+			"SELECT subject_fk FROM matriculated_subject WHERE "+
+				"matriculated_subject_id = '%s'", matSubjId[i])
+		r, e = d.Db.Query(query)
+		var si string
+		if e == nil && r.Next() {
+			e = r.Scan(&si)
+		}
+		if e == nil {
+			subjId = append(subjId, si)
+		}
+	}
+	// print("subjId: ")
+	// println(len(subjId))
+	subjNameId, subjPeriod, subjYear := make([]string, 0),
+		make([]string, 0), make([]string, 0)
+	for i := 0; e == nil && i != len(subjId); i++ {
+		r.Close()
+		query = fmt.Sprintf(
+			"SELECT subject_name_fk, period, year FROM subject WHERE "+
+				"subject_id = '%s'", subjId[i])
+		r, e = d.Db.Query(query)
+		var sni, period, year string
+		if e == nil && r.Next() {
+			e = r.Scan(&sni, &period, &year)
+		}
+		if e == nil {
+			subjNameId, subjPeriod, subjYear =
+				append(subjNameId, sni),
+				append(subjPeriod, period),
+				append(subjYear, year)
+		}
+	}
+	// print("subjNameId: ")
+	// println(len(subjNameId))
+	subjName := make([]string, 0)
+	for i := 0; e == nil && i != len(subjNameId); i++ {
+		r.Close()
+		query = fmt.Sprintf("SELECT name FROM subject_name WHERE "+
+			"subject_name_id = '%s'", subjNameId[i])
+		r, e = d.Db.Query(query)
+		var sn string
+		if e == nil && r.Next() {
+			e = r.Scan(&sn)
+		}
+		if e == nil {
+			subjName = append(subjName, sn)
+		}
+	}
+	// print("subjName: ")
+	// println(len(subjName))
+	es = make([]StudentEvl, len(subjName))
+	for i := 0; e == nil && i != len(subjName); i++ {
+		es[i] = StudentEvl{
+			SubjectName: subjName[i],
+			Period:      subjPeriod[i],
+			Year:        subjYear[i],
+			EvalValue:   evalVal[i],
+		}
+	}
 	return
 }

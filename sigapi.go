@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/gorilla/mux"
-	ld "github.com/lamg/ldaputil"
 	_ "github.com/lib/pq"
 	"github.com/rs/cors"
 	"html/template"
@@ -28,37 +27,45 @@ type DBRecord struct {
 	Status  string `json:"status"`
 }
 
-func NewPostgreSDB(addr, user, pass, tpf string,
-	ld *ld.Ldap) (d *SDB, e error) {
+func NewPostgreSDB(addr, user, pass, tpf string) (d *SDB, e error) {
 	var db *sql.DB
 	db, e = sql.Open("postgres",
 		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
 	if e == nil {
 		db.SetMaxOpenConns(20)
 		db.SetMaxIdleConns(0)
-		db.SetConnMaxLifetime(time.Nanosecond)
+		db.SetConnMaxLifetime(5 * time.Second)
 	}
 	var tp *template.Template
 	if e == nil {
 		tp, e = template.New("doc").ParseFiles(tpf)
 	}
 	if e == nil {
-		d = &SDB{Db: db, tp: tp, cr: NewJWTCrypt(), Ld: ld}
+		d = &SDB{Db: db, tp: tp}
+		rt := mux.NewRouter()
+		rt.HandleFunc("/", d.docHn)
+		d.pagPath = fmt.Sprintf("/paginador/{%s:[0-9]+}/{%s:[0-9]+}",
+			Offset, Size)
+		rt.HandleFunc(d.pagPath, d.pagHn).Methods(h.MethodGet)
+		d.idPath = fmt.Sprintf("/sigenu-id/{%s:[a-z0-9:-]+}", Id)
+		rt.HandleFunc(d.idPath, d.idHn).Methods(h.MethodGet)
+		d.namePath = fmt.Sprintf("/sigenu-nombre/{%s}", Name)
+		rt.HandleFunc(d.namePath, d.nameHn).Methods(h.MethodGet)
+		d.evalPath = fmt.Sprintf("/eval/{%s:[a-z0-9:-]+}", IN)
+		rt.HandleFunc(d.evalPath, d.evaluationsHn).Methods(h.MethodGet)
+		d.Handler = cors.AllowAll().Handler(rt)
 	}
 	return
 }
 
 type SDB struct {
 	Db       *sql.DB
-	Ld       *ld.Ldap
-	cr       *JWTCrypt
-	rt       *mux.Router
+	Handler  h.Handler
 	tp       *template.Template
 	pagPath  string
 	idPath   string
 	namePath string
 	evalPath string
-	authPath string
 }
 
 const (
@@ -69,26 +76,6 @@ const (
 	IN       = "identity"
 	NamePgLn = 100
 )
-
-func (d *SDB) GetHandler() (hn h.Handler) {
-	if d.rt == nil {
-		d.rt = mux.NewRouter()
-		d.rt.HandleFunc("/", d.docHn)
-		d.pagPath = fmt.Sprintf("/paginador/{%s:[0-9]+}/{%s:[0-9]+}",
-			Offset, Size)
-		d.rt.HandleFunc(d.pagPath, d.pagHn).Methods(h.MethodGet)
-		d.idPath = fmt.Sprintf("/sigenu-id/{%s:[a-z0-9:-]+}", Id)
-		d.rt.HandleFunc(d.idPath, d.idHn).Methods(h.MethodGet)
-		d.namePath = fmt.Sprintf("/sigenu-nombre/{%s}", Name)
-		d.rt.HandleFunc(d.namePath, d.nameHn).Methods(h.MethodGet)
-		d.authPath = "/auth"
-		d.rt.HandleFunc(d.authPath, d.authHn).Methods(h.MethodPost)
-		d.evalPath = "/eval"
-		d.rt.HandleFunc(d.evalPath, d.evaluationsHn)
-	}
-	hn = cors.AllowAll().Handler(d.rt)
-	return
-}
 
 func (d *SDB) docHn(w h.ResponseWriter, r *h.Request) {
 	e := d.tp.ExecuteTemplate(w, "doc", struct {
@@ -179,143 +166,6 @@ func (d *SDB) queryId(id string) (s *DBRecord, e error) {
 	}
 	if r != nil {
 		r.Close()
-	}
-	return
-}
-
-type StudentEvl struct {
-	SubjectName string `json:"subjectName"`
-	EvalValue   string `json:"evalValue"`
-	Period      string `json:"period"`
-	Year        string `json:"year"`
-}
-
-func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
-	query := fmt.Sprintf("SELECT id_student FROM student WHERE "+
-		" identification = '%s'", idStudent)
-	// println("query: " + query)
-	// print("idStudent: ")
-	// println(idStudent)
-	var r *sql.Rows
-	r, e = d.Db.Query(query)
-	var studDBId string
-	// print("error: ")
-	// println(e != nil)
-	ok := r.Next()
-	// print("ok: ")
-	// println(ok)
-	// rerr := r.Err()
-	// if rerr != nil {
-	// 	print("rerr: ")
-	// 	println(rerr.Error())
-	// }
-	if e == nil && ok {
-		e = r.Scan(&studDBId)
-	}
-	// print("studDBId: ")
-	// println(studDBId)
-	if e == nil {
-		r.Close()
-		query = fmt.Sprintf(
-			"SELECT evaluation_value_fk,matriculated_subject_fk "+
-				" FROM evaluation WHERE student_fk = '%s'", studDBId)
-		r, e = d.Db.Query(query)
-	}
-	evalValId, matSubjId := make([]string, 0), make([]string, 0)
-	for i := 0; e == nil && r.Next(); i++ {
-		var ev, ms sql.NullString
-		e = r.Scan(&ev, &ms)
-		if e == nil && ev.Valid && ms.Valid {
-			evalValId, matSubjId = append(evalValId, ev.String),
-				append(matSubjId, ms.String)
-		}
-	}
-	// print("matSubjId: ")
-	// println(len(matSubjId))
-	// print("evalValId: ")
-	// println(len(evalValId))
-	// print("error: ")
-	// println(e != nil)
-	evalVal := make([]string, 0)
-	for i := 0; e == nil && i != len(evalValId); i++ {
-		r.Close()
-		query = fmt.Sprintf("SELECT value FROM evaluation_value WHERE "+
-			"id_evaluation_value = '%s'", evalValId[i])
-		// print("query evalValId: ")
-		// println(query)
-		r, e = d.Db.Query(query)
-		var ev string
-		if e == nil && r.Next() {
-			e = r.Scan(&ev)
-		}
-		if e == nil {
-			evalVal = append(evalVal, ev)
-		}
-	}
-	// print("evalVal: ")
-	// println(len(evalVal))
-	subjId := make([]string, 0)
-	for i := 0; e == nil && i != len(matSubjId); i++ {
-		r.Close()
-		query = fmt.Sprintf(
-			"SELECT subject_fk FROM matriculated_subject WHERE "+
-				"matriculated_subject_id = '%s'", matSubjId[i])
-		r, e = d.Db.Query(query)
-		var si string
-		if e == nil && r.Next() {
-			e = r.Scan(&si)
-		}
-		if e == nil {
-			subjId = append(subjId, si)
-		}
-	}
-	// print("subjId: ")
-	// println(len(subjId))
-	subjNameId, subjPeriod, subjYear := make([]string, 0),
-		make([]string, 0), make([]string, 0)
-	for i := 0; e == nil && i != len(subjId); i++ {
-		r.Close()
-		query = fmt.Sprintf(
-			"SELECT subject_name_fk, period, year FROM subject WHERE "+
-				"subject_id = '%s'", subjId[i])
-		r, e = d.Db.Query(query)
-		var sni, period, year string
-		if e == nil && r.Next() {
-			e = r.Scan(&sni, &period, &year)
-		}
-		if e == nil {
-			subjNameId, subjPeriod, subjYear =
-				append(subjNameId, sni),
-				append(subjPeriod, period),
-				append(subjYear, year)
-		}
-	}
-	// print("subjNameId: ")
-	// println(len(subjNameId))
-	subjName := make([]string, 0)
-	for i := 0; e == nil && i != len(subjNameId); i++ {
-		r.Close()
-		query = fmt.Sprintf("SELECT name FROM subject_name WHERE "+
-			"subject_name_id = '%s'", subjNameId[i])
-		r, e = d.Db.Query(query)
-		var sn string
-		if e == nil && r.Next() {
-			e = r.Scan(&sn)
-		}
-		if e == nil {
-			subjName = append(subjName, sn)
-		}
-	}
-	// print("subjName: ")
-	// println(len(subjName))
-	es = make([]StudentEvl, len(subjName))
-	for i := 0; e == nil && i != len(subjName); i++ {
-		es[i] = StudentEvl{
-			SubjectName: subjName[i],
-			Period:      subjPeriod[i],
-			Year:        subjYear[i],
-			EvalValue:   evalVal[i],
-		}
 	}
 	return
 }

@@ -11,19 +11,16 @@
 		</h1>
 		
 		<h2>Paginador</h2>
-		<p> La ruta <code>paginador</code> recibe dos números que son el índice del primer elemento que se va a mostrar en la página, y la cantidad de elementos que tendrá la página. Por ejemplo <code>/pagina/0/10</code> comenzará desde el elemento 0 mostrando una página de 10 elementos. La especificación formal de la ruta es {{.PagPath}}</p>
+		<p> La ruta <code>/paginador/inicio/cantidad</code> recibe dos números que son el índice del primer elemento que se va a mostrar en la página, y la cantidad de elementos que tendrá la página. Por ejemplo <code>/pagina/0/10</code> comenzará desde el elemento 0 mostrando una página de 10 elementos. La especificación formal de la ruta es {{.PagPath}}</p>
 
 		<h2>Obtener registro según el identificador</h2>
-		<p> La ruta <code>sigenu-id</code> devuelve el registro en la base de datos SIGENU asociado al identificador suministrado en la URL. Por ejemplo <code>/sigenu-id/-6baf556d:13225553c27:-7fce</code> devuelve el registro en SIGENU con ese identificador. La especificación formal de la ruta es {{.IdPath}}</p>
+		<p> La ruta <code>/sigenu-id/id-de-sigenu</code> devuelve el registro en la base de datos SIGENU asociado al identificador suministrado en la URL. Por ejemplo <code>/sigenu-id/-6baf556d:13225553c27:-7fce</code> devuelve el registro en SIGENU con ese identificador. La especificación formal de la ruta es {{.IdPath}}</p>
 
 		<h2>Filtrar por nombre</h2>
-		<p> La ruta <code>nombre</code> filtra todos los registros en SIGENU cuyo nombre coincide con el patrón suministrado. Por ejemplo, <code>/nombre/juan</code> devuelve todos los registros cuyo campo nombre contiene <code>juan</code>. La especificación formal de la ruta es {{.NamePath}}</p>
-
-		<h2>Autenticar</h2>
-		<p>La ruta <code>/auth</code> responde a un POST con el cuerpo <code>{"user":"usuario", "pass":"contraseña"}</code> una cadena (JSON Web Token) que sirve para identificar al usuario si las credenciales proporcionadas en el POST son válidas. Esta cadena caduca a la hora de emitida. </p>
+		<p> La ruta <code>/sigenu-nombre/nombre</code> filtra todos los registros en SIGENU cuyo nombre coincide con el patrón suministrado. Por ejemplo, <code>/sigenu-nombre/juan</code> devuelve todos los registros cuyo campo nombre contiene <code>juan</code>. La especificación formal de la ruta es {{.NamePath}}</p>
 
 		<h2>Evualuaciones</h2>
-		<p>La ruta <code>/eval</code> responde a un GET con el header "authHd" asociado a la cadena enviada por <code>/auth</code>, con las evaluaciones del estudiante al que identifica esa cadena</p>
+		<p>La ruta <code>/eval/carne-identidad</code> responde a un GET co con las evaluaciones del estudiante al que identifica ese carné de identidad</p>
 	</body>
 </html>
 {{end}}
