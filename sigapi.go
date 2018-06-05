@@ -9,6 +9,7 @@ import (
 	"github.com/rs/cors"
 	"html/template"
 	h "net/http"
+	"time"
 )
 
 type DBRecord struct {
@@ -32,6 +33,11 @@ func NewPostgreSDB(addr, user, pass, tpf string,
 	var db *sql.DB
 	db, e = sql.Open("postgres",
 		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
+	if e == nil {
+		db.SetMaxOpenConns(20)
+		db.SetMaxIdleConns(0)
+		db.SetConnMaxLifetime(time.Nanosecond)
+	}
 	var tp *template.Template
 	if e == nil {
 		tp, e = template.New("doc").ParseFiles(tpf)
@@ -150,6 +156,9 @@ func (d *SDB) queryName(name string) (s []DBRecord, e error) {
 		}
 		end = i == NamePgLn || e != nil || !next
 	}
+	if r != nil {
+		r.Close()
+	}
 	s = s[:i]
 	return
 }
@@ -167,6 +176,9 @@ func (d *SDB) queryId(id string) (s *DBRecord, e error) {
 	}
 	if e == nil {
 		s = &n
+	}
+	if r != nil {
+		r.Close()
 	}
 	return
 }
@@ -324,9 +336,11 @@ func (d *SDB) queryRange(offset, size string) (s []DBRecord, e error) {
 			s = append(s, n)
 		}
 	}
-	if r != nil && e == nil {
-		e = r.Err()
+	if r != nil {
 		r.Close()
+	}
+	if e == nil {
+		e = r.Err()
 	}
 	return
 }
