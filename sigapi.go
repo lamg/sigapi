@@ -32,7 +32,7 @@ func NewPostgreSDB(addr, user, pass, tpf string) (d *SDB, e error) {
 	db, e = sql.Open("postgres",
 		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
 	if e == nil {
-		db.SetMaxOpenConns(20)
+		db.SetMaxOpenConns(200)
 		db.SetMaxIdleConns(0)
 		db.SetConnMaxLifetime(5 * time.Second)
 	}
