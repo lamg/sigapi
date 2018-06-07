@@ -33,7 +33,7 @@ func NewPostgreSDB(addr, user, pass, tpf string) (d *SDB, e error) {
 	if e == nil {
 		db.SetMaxOpenConns(200)
 		//db.SetMaxIdleConns(100)
-		//db.SetConnMaxLifetime(0)
+		db.SetConnMaxLifetime(0)
 	}
 	var tp *template.Template
 	if e == nil {
@@ -243,9 +243,11 @@ func (d *SDB) queryAux(stat_fk, fac_fk,
 				e = fmt.Errorf("Información no encontrada")
 			}
 		}
+		if s != nil {
+			s.Close()
+		}
 		if e == nil {
 			e = s.Err()
-			s.Close()
 		}
 	}
 	var s *sql.Rows
@@ -267,9 +269,11 @@ func (d *SDB) queryAux(stat_fk, fac_fk,
 			}
 		}
 	}
-	if e == nil && s != nil {
-		e = s.Err()
+	if s != nil {
 		s.Close()
+	}
+	if e == nil {
+		e = s.Err()
 	}
 	return
 }
