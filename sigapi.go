@@ -4,11 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/gorilla/mux"
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/stdlib"
 	"github.com/rs/cors"
 	"html/template"
 	h "net/http"
-	"time"
 )
 
 type DBRecord struct {
@@ -29,12 +28,12 @@ type DBRecord struct {
 
 func NewPostgreSDB(addr, user, pass, tpf string) (d *SDB, e error) {
 	var db *sql.DB
-	db, e = sql.Open("postgres",
+	db, e = sql.Open("pgx",
 		fmt.Sprintf("postgres://%s:%s@%s", user, pass, addr))
 	if e == nil {
 		db.SetMaxOpenConns(200)
-		db.SetMaxIdleConns(0)
-		db.SetConnMaxLifetime(5 * time.Second)
+		//db.SetMaxIdleConns(100)
+		//db.SetConnMaxLifetime(0)
 	}
 	var tp *template.Template
 	if e == nil {
