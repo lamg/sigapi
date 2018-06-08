@@ -122,33 +122,23 @@ type StudentEvl struct {
 func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 	query := fmt.Sprintf("SELECT id_student FROM student WHERE "+
 		" identification = '%s'", idStudent)
-	// println("query: " + query)
-	// print("idStudent: ")
-	// println(idStudent)
 	var r *sql.Rows
-	r, e = d.Db.Query(query)
+	if e == nil {
+		r, e = d.db.Query(query)
+	}
 	var studDBId string
-	// print("error: ")
-	// println(e != nil)
 	ok := r.Next()
-	// print("ok: ")
-	// println(ok)
-	// rerr := r.Err()
-	// if rerr != nil {
-	// 	print("rerr: ")
-	// 	println(rerr.Error())
-	// }
 	if e == nil && ok {
 		e = r.Scan(&studDBId)
 	}
-	// print("studDBId: ")
-	// println(studDBId)
-	if e == nil {
+	if r != nil {
 		r.Close()
+	}
+	if e == nil {
 		query = fmt.Sprintf(
 			"SELECT evaluation_value_fk,matriculated_subject_fk "+
 				" FROM evaluation WHERE student_fk = '%s'", studDBId)
-		r, e = d.Db.Query(query)
+		r, e = d.db.Query(query)
 	}
 	evalValId, matSubjId := make([]string, 0), make([]string, 0)
 	for i := 0; e == nil && r.Next(); i++ {
@@ -159,20 +149,16 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 				append(matSubjId, ms.String)
 		}
 	}
-	// print("matSubjId: ")
-	// println(len(matSubjId))
-	// print("evalValId: ")
-	// println(len(evalValId))
-	// print("error: ")
-	// println(e != nil)
+	if r != nil {
+		r.Close()
+	}
 	evalVal := make([]string, 0)
 	for i := 0; e == nil && i != len(evalValId); i++ {
-		r.Close()
 		query = fmt.Sprintf("SELECT value FROM evaluation_value WHERE "+
 			"id_evaluation_value = '%s'", evalValId[i])
 		// print("query evalValId: ")
 		// println(query)
-		r, e = d.Db.Query(query)
+		r, e = d.db.Query(query)
 		var ev string
 		if e == nil && r.Next() {
 			e = r.Scan(&ev)
@@ -180,16 +166,16 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 		if e == nil {
 			evalVal = append(evalVal, ev)
 		}
+		if r != nil {
+			r.Close()
+		}
 	}
-	// print("evalVal: ")
-	// println(len(evalVal))
 	subjId := make([]string, 0)
 	for i := 0; e == nil && i != len(matSubjId); i++ {
-		r.Close()
 		query = fmt.Sprintf(
 			"SELECT subject_fk FROM matriculated_subject WHERE "+
 				"matriculated_subject_id = '%s'", matSubjId[i])
-		r, e = d.Db.Query(query)
+		r, e = d.db.Query(query)
 		var si string
 		if e == nil && r.Next() {
 			e = r.Scan(&si)
@@ -197,17 +183,17 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 		if e == nil {
 			subjId = append(subjId, si)
 		}
+		if r != nil {
+			r.Close()
+		}
 	}
-	// print("subjId: ")
-	// println(len(subjId))
 	subjNameId, subjPeriod, subjYear := make([]string, 0),
 		make([]string, 0), make([]string, 0)
 	for i := 0; e == nil && i != len(subjId); i++ {
-		r.Close()
 		query = fmt.Sprintf(
 			"SELECT subject_name_fk, period, year FROM subject WHERE "+
 				"subject_id = '%s'", subjId[i])
-		r, e = d.Db.Query(query)
+		r, e = d.db.Query(query)
 		var sni, period, year string
 		if e == nil && r.Next() {
 			e = r.Scan(&sni, &period, &year)
@@ -218,15 +204,15 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 				append(subjPeriod, period),
 				append(subjYear, year)
 		}
+		if r != nil {
+			r.Close()
+		}
 	}
-	// print("subjNameId: ")
-	// println(len(subjNameId))
 	subjName := make([]string, 0)
 	for i := 0; e == nil && i != len(subjNameId); i++ {
-		r.Close()
 		query = fmt.Sprintf("SELECT name FROM subject_name WHERE "+
 			"subject_name_id = '%s'", subjNameId[i])
-		r, e = d.Db.Query(query)
+		r, e = d.db.Query(query)
 		var sn string
 		if e == nil && r.Next() {
 			e = r.Scan(&sn)
@@ -234,9 +220,13 @@ func (d *SDB) queryEvl(idStudent string) (es []StudentEvl, e error) {
 		if e == nil {
 			subjName = append(subjName, sn)
 		}
+		if r != nil {
+			r.Close()
+		}
 	}
-	// print("subjName: ")
-	// println(len(subjName))
+	if r != nil {
+		r.Close()
+	}
 	es = make([]StudentEvl, len(subjName))
 	for i := 0; e == nil && i != len(subjName); i++ {
 		es[i] = StudentEvl{
